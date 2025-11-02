@@ -1,0 +1,83 @@
+services:
+  # Base de datos MongoDB
+  mongodb:
+    image: mongo:7.0
+    container_name: maddelivery-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: maddelivery
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/maddelivery --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Base de datos PostgreSQL para calificaciones
+  postgres:
+    image: postgres:15-alpine
+    container_name: maddelivery-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: calificaciones
+      POSTGRES_USER: maddelivery
+      POSTGRES_PASSWORD: maddelivery123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maddelivery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Spring Boot
+  app:
+    build: .
+    container_name: maddelivery-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/maddelivery
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/calificaciones
+      - SPRING_DATASOURCE_USERNAME=maddelivery
+      - SPRING_DATASOURCE_PASSWORD=maddelivery123
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+      - AWS_REGION=us-east-2
+      - AWS_S3_BUCKETNAME=foodapi-col
+      - JWT_SECRET_KEY=miClaveSecretaSuperSeguraParaJWT2024DebeSerLargaYCompleja123456789
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # Frontend Admin Panel
+  adminpanel:
+    build: ../adminpanel
+    container_name: maddelivery-adminpanel
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - app
+
+  # Frontend App Cliente
+  appcliente:
+    build: ../appcliente
+    container_name: maddelivery-appcliente
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    depends_on:
+      - app
+
+volumes:
+  mongodb_data:
+  postgres_data:
